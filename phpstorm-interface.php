@@ -256,6 +256,7 @@ final class VersionedAnalyser
     public function setBaselines()
     {
         global $BASELINE_FOLDER;
+        $this->getVersions();
         foreach ($this->aVersions as $sVersion)
         {
             $oPsalmInstance = new PsalmInstance($sVersion, ".");
@@ -264,7 +265,3 @@ final class VersionedAnalyser
         }
     }
 }
-
-$oVersionedAnalyser = new VersionedAnalyser();
-echo $oVersionedAnalyser->run();
-exit();
