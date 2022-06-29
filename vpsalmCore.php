@@ -101,11 +101,11 @@ class PsalmInstance
     /** @var string $sBaselineFile The folder with the baseline for this instance. */
     public $sBaselineFile;
 
-    function __construct(string $sVersion, string $sTempFolder)
+    function __construct(string $sVersion, string $sTargetFolder)
     {
         $this->sVersion = $sVersion;
-        $this->sConfigFile = $sTempFolder."/psalm.xml";
-        $this->sBaselineFile = $sTempFolder."/psalm-baseline.xml";
+        $this->sConfigFile = $sTargetFolder."/psalm.xml";
+        $this->sBaselineFile = $sTargetFolder."/psalm-baseline.xml";
     }
 
     /** Create a temp Config file based on the global reference one. Save it in the $sConfigFile.
@@ -123,7 +123,14 @@ class PsalmInstance
         }
         else
         {
-            $oConfig->attributes()["errorBaseline"] = $this->sBaselineFile;
+            if (key_exists("errorBaseline",  $oConfig->attributes()))
+            {
+                $oConfig->attributes()["errorBaseline"] = $this->sBaselineFile;
+            }
+            else
+            {
+                $oConfig->addAttribute("errorBaseline", $this->sBaselineFile);
+            }
         }
         file_put_contents($this->sConfigFile, $oConfig->asXML());
     }
@@ -152,12 +159,12 @@ class PsalmInstance
         }
         else if (preg_match("#.*--set-baseline.*#", $sParams))
         {
-            $this->createConfig();
+            $this->createConfig(true);
             $sConf = "-c $this->sConfigFile ";
         }
         else
         {
-            $this->createConfig(true);
+            $this->createConfig();
             $this->createBaseline();
             $sConf = "-c $this->sConfigFile ";
         }
@@ -202,18 +209,30 @@ final class VersionedAnalyser
     private function runPsalm()
     {
         global $argv;
-        $sTarget = $argv[count($argv) - 1];
+        $sTargetFile = $argv[count($argv) - 1];
         foreach ($this->aVersions as $sVersion)
         {
-            $sTempFolder = preg_replace("#Psalmtemp_folder(\d+)/(\S*)#", "Psalmtemp_folder$1/", $sTarget);
-            $oInstance = new PsalmInstance($sVersion, $sTempFolder);
+            $cwd = preg_replace("#\\\\#", "/", getcwd());
+            $sPattern = "#(\S+?Psalmtemp_folder(\d+)|$cwd|\.)/(\S*)#";
+            $aMatches = null;
+            if (!preg_match($sPattern, $sTargetFile, $aMatches))
+            {
+                throw new Exception("Invalid path, must point toward either a project file
+                or a copy with tree from project root with Psalmtemp_folderXXXX as root.");
+            }
+            $sTargetFolder = $aMatches[1];
+
+//            $sPattern = "#(Psalmtemp_folder(\d+)|C:)/(\S*)#";
+//            $sTargetFolder = preg_replace($sPattern, "Psalmtemp_folder$1/", $sTargetFile);
+            
+            $oInstance = new PsalmInstance($sVersion, $sTargetFolder);
             $iDashC = array_search("-c", $argv);
             if ($iDashC)
             {
                 array_splice($argv, $iDashC, 2);
             }
             $sParams = implode(" ", array_slice($argv, 1));
-            $this->aAnalysis[] = $oInstance->calLPsalm($sParams);
+            $this->aAnalysis[$sVersion] = $oInstance->calLPsalm($sParams);
         }
     }
 
@@ -267,7 +286,7 @@ final class VersionedAnalyser
             {
                 if ($oExec->code() != 0)
                 {
-                    throw new Exception("Call to version $sVersion went wrong, error code : {$oExec->code()}");
+                    //throw new Exception("Call to version $sVersion went wrong, error code : {$oExec->code()}");
                 }
                 /** @var SimpleXMLElement $oWarnings */
                 $oWarnings = simplexml_load_string($oExec->stdout());
@@ -296,9 +315,8 @@ final class VersionedAnalyser
                 /** @var array $aIgnored */
                 if ($sVersion != "" or $bNoIgnore or !$this->isInErrors($aIgnored, $sError))
                 {
-                    $oError = simplexml_load_string($sError);
-                    $oError->error->attributes()["message"] = $sVersion . $oError->error->attributes()["message"];
-                    $this->sResult .= $oError->asXML()."\n";
+                    $this->sResult .= preg_replace("#(\<file name=\"\S+\"\>\n\<error line=\"\d+\" column=\"\d\" severity=\"\w+\" messge=\")(\S+\"/\>\n\</file\>)#",
+                            "$1$sVersion$2", $sError)."\n";
                 }
             }
             $this->sResult .= '</checkstyle>'."\n";

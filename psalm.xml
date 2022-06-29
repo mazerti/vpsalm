@@ -1,26 +1,3 @@
 <?xml version="1.0"?>
-<psalm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xmlns="https://getpsalm.org/schema/config"
-       errorLevel="7"
-       resolveFromConfigFile="true"
-       xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
-       phpVersion="8.0.0"
-       errorBaseline="psalm-baseline.xml"
->
-    <projectFiles>
-        <directory name="."/>
-        <file name="vendor/autoload.php"/>
-        <file name="vendor/composer/autoload_classmap.php"/>
-        <file name="vendor/composer/autoload_files.php"/>
-        <file name="vendor/composer/autoload_namespaces.php"/>
-        <file name="vendor/composer/autoload_psr4.php"/>
-        <file name="vendor/composer/autoload_real.php"/>
-        <file name="vendor/composer/autoload_static.php"/>
-        <file name="vendor/composer/ClassLoader.php"/>
-        <file name="vendor/composer/installed.php"/>
-        <file name="vendor/composer/InstalledVersions.php"/>
-        <ignoreFiles>
-            <directory name="vendor"/>
-        </ignoreFiles>
-    </projectFiles>
+<psalm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="https://getpsalm.org/schema/config" errorLevel="7" resolveFromConfigFile="true" xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd" phpVersion="8.0.0" errorBaseline="psalm-baseline.xml">
 </psalm>
