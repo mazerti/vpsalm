@@ -123,7 +123,7 @@ class PsalmInstance
         }
         else
         {
-            if (key_exists("errorBaseline",  $oConfig->attributes()))
+            if (isset($oConfig->attributes()["errorBaseline"]))
             {
                 $oConfig->attributes()["errorBaseline"] = $this->sBaselineFile;
             }
@@ -131,6 +131,10 @@ class PsalmInstance
             {
                 $oConfig->addAttribute("errorBaseline", $this->sBaselineFile);
             }
+        }
+        if (realpath($this->sConfigFile) != realpath($CONFIG_FILE))
+        {
+            unset($oConfig->projectFiles);
         }
         file_put_contents($this->sConfigFile, $oConfig->asXML());
     }
@@ -292,7 +296,7 @@ final class VersionedAnalyser
                 $oWarnings = simplexml_load_string($oExec->stdout());
                 foreach ($oWarnings as $oErrorFile)
                 {
-                    $this->aResults[$oErrorFile->asXML()] = (array_key_exists($oErrorFile->asXML(), $this->aResults)) ? "" : $sVersion;
+                    $this->aResults[$oErrorFile->asXML()] = (isset($this->aResults[$oErrorFile->asXML()])) ? "" : $sVersion;
                 }
             }
 

@@ -1,10 +1,12 @@
 <?php
 
-$COMPOSER = getcwd()."/composer.json";
-$PSALM_PATH = getcwd()."/vendor/bin/psalm";
-$CONFIG_FILE = getcwd()."/psalm.xml";
-$BASELINE_FOLDER = getcwd()."/baselines";
-$IGNORE_FILE = getcwd()."/psalm-ignore.xml";
+$sCwd = preg_replace("#\\\\#", "/", getcwd());
 
-$SPY_REPORT = getcwd()."/SpyReport.txt";
+$COMPOSER = $sCwd."/composer.json";
+$PSALM_PATH = $sCwd."/vendor/bin/psalm";
+$CONFIG_FILE = $sCwd."/psalm.xml";
+$BASELINE_FOLDER = $sCwd."/baselines";
+$IGNORE_FILE = $sCwd."/vpsalm-ignore.xml";
+
+$SPY_REPORT = $sCwd."/SpyReport.txt";
 $SPY_Errors = sys_get_temp_dir()."/SpyErrors";
