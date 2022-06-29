@@ -13,6 +13,7 @@ class Execution {
     /** @var string|null */
     private $sReturn;
     function __construct(string $cmd){
+        $debug = getcwd();
         exec($cmd, $this->aReturns, $this->iCode);
         /** @var array<array-key, string> aReturns */
         $this->aReturns = $this->aReturns ?: array();
@@ -37,19 +38,54 @@ class Spy
     public $sErrors_File;
     /** @var float $fTimeZero Time of the instantiation. */
     private $fTimeZero;
-    /** @var array $aLogs An array containing the logs of the program. */
-    private $aLog;
+    /** @var array $aReport The reports from the last refresh. */
+    private $aReport;
+    /** @var string $id Identify the current report in $this->aReport. */
+    private $id;
 
-    function __construct(bool $bRefresh = false)
+    /**
+     * @param array $arg        $argv typically.
+     * @param bool $bRefresh    $should the output be refreshed ?
+     */
+    function __construct(array $arg, bool $bRefresh = false)
     {
         global $SPY_REPORT;
         $this->sErrors_File = sys_get_temp_dir()."/SpyErrors";
         $this->fTimeZero = microtime(true);
-        $this->aLog = array(
-            "Code"=>"",
-            "Errors"=>"",
+        $this->aReport = ($bRefresh) ? array() : json_decode(file_get_contents($SPY_REPORT), true);
+        $this->id = date("G:i") ."$:".implode(" ", $arg);
+        while (key_exists($this->id, $this->aReport))
+        {
+            $this->id .= "`";
+        }
+        $this->aReport[$this->id] = array(
+            "Sub Calls"=>array(),
+            "Return"=>"",
             "Debug"=>"",
         );
+    }
+    
+    public function watchCall(string $call, bool $watch_errors)
+    {
+        $this->aReport[$this->id]["Sub Calls"][] = array(
+            "Command" => $call,
+            "Duration" => microtime() - $this->fTimeZero
+        );
+        if ($watch_errors)
+        {
+            array_key_last($this->aReport[$this->id]["Sub Calls"])["Errors"] = file_get_contents($this->sErrors_File);
+        }
+    }
+
+    public function watchDebug(string $content)
+    {
+        $this->aReport[$this->id]["Debug"] .= "$content\n";
+    }
+
+    public function __destruct()
+    {
+        global $SPY_REPORT;
+        file_put_contents($SPY_REPORT, json_encode($this->aReport));
     }
 }
 
@@ -110,16 +146,22 @@ class PsalmInstance
     public function calLPsalm(string $sParams): Execution
     {
         global $PSALM_PATH;
-        if (!preg_match("#.* --set-baseline.*#", $sParams))
+        if (preg_match("#.*--version.*#", $sParams))
+        {
+            $sConf = "";
+        }
+        else if (preg_match("#.*--set-baseline.*#", $sParams))
         {
             $this->createConfig();
-            $this->createBaseline();
+            $sConf = "-c $this->sConfigFile ";
         }
         else
         {
             $this->createConfig(true);
+            $this->createBaseline();
+            $sConf = "-c $this->sConfigFile ";
         }
-        $sCommand = "$PSALM_PATH -c $this->sConfigFile $sParams";
+        $sCommand = "$PSALM_PATH $sConf$sParams 2> SpyErrors";
         return new Execution($sCommand);
     }
 }
@@ -149,7 +191,8 @@ final class VersionedAnalyser
     {
         global $COMPOSER;
         $oComposer = fopen($COMPOSER, "r");
-        preg_match("#>=(\d.\d.\d) <=(\d.\d.\d)#", json_decode(fread($oComposer, filesize($COMPOSER)), true)["require"]["php"], $this->aVersions);
+        $sPHPversions = json_decode(fread($oComposer, filesize($COMPOSER)), true)["require"]["php"];
+        preg_match("#>=(\d.\d.\d) <(\d.\d.\d)#", $sPHPversions, $this->aVersions);
         array_splice($this->aVersions, 0, 1);
     }
 
@@ -192,52 +235,74 @@ final class VersionedAnalyser
      *  - each exception only once
      *  - an indicator if the error is only for a specific version of php
      *  - some exception excluded if they are int all versions.
-     * @return void         The result is stored in $this->aResults as an array of versions tags indexed with xml strings of elements. Then create $this->sResult.
+     * @return void         The result is stored in $this->aResults as an array associating xml strings of errors with versions tags. Then create $this->sResult.
      * @throws Exception    If at least one version caused Psalm to return an error.
      */
     private function sortErrors()
     {
-        /* First merge the different results, removing the duplicates. */
-        foreach ($this->aAnalysis as $sVersion => $oExec)
+        global $argv;
+        if ($argv[1] == "--version")
         {
-            if ($oExec->code() != 0)
+            foreach ($this->aAnalysis as $sVersion=>$psalm)
             {
-                /* An Error has occurred, crash the program detailing the situation to the maximum. */
-                throw new Exception("Call to version $sVersion went wrong, error code : {$oExec->code()}");
+                if ($psalm->code() != 0)
+                {
+                    throw new Exception("Call to version $sVersion went wrong, error code : {$psalm->code()}");
+                }
+                if ($this->aResults == null)
+                {
+                    $this->aResults[0] = $psalm->stdout();
+                }
+                else if ($psalm->stdout() != $this->aResults[0])
+                {
+                    throw new Exception("Psalm version don't match, very weird !");
+                }
             }
-            /** @var SimpleXMLElement $oWarnings */
-            $oWarnings = simplexml_load_string($oExec->stdout());
-            foreach ($oWarnings as $oErrorFile)
-            {
-                $this->aResults[$oErrorFile->asXML()] = (array_key_exists($oErrorFile->asXML(), $this->aResults)) ? "" : $sVersion;
-            }
-        }
-
-        global $IGNORE_FILE;
-        /* Parse $this->aResults and compose $this->sReturn, filtering unwanted errors. */
-        $this->sResult = '<?xml version="1.0" encoding="UTF-8"?>'."\n".'<checkstyle>'."\n";
-        if (is_file($IGNORE_FILE))
-        {
-            $bNoIgnore = false;
-            $oXMLIgnored = simplexml_load_file($IGNORE_FILE);
-            $oJsonIgnored = json_encode($oXMLIgnored);
-            $aIgnored = json_decode($oJsonIgnored, true);
+            $this->sResult = $this->aResults[0];
         }
         else
         {
-            $bNoIgnore = true;
-        }
-        foreach ($this->aResults as $sError => $sVersion)
-        {
-            /** @var array $aIgnored */
-            if ($sVersion != "" or $bNoIgnore or !$this->isInErrors($aIgnored, $sError))
+            /* First merge the different results, removing the duplicates. */
+            foreach ($this->aAnalysis as $sVersion => $oExec)
             {
-                $oError = simplexml_load_string($sError);
-                $oError->error->attributes()["message"] = $sVersion . $oError->error->attributes()["message"];
-                $this->sResult .= $oError->asXML()."\n";
+                if ($oExec->code() != 0)
+                {
+                    throw new Exception("Call to version $sVersion went wrong, error code : {$oExec->code()}");
+                }
+                /** @var SimpleXMLElement $oWarnings */
+                $oWarnings = simplexml_load_string($oExec->stdout());
+                foreach ($oWarnings as $oErrorFile)
+                {
+                    $this->aResults[$oErrorFile->asXML()] = (array_key_exists($oErrorFile->asXML(), $this->aResults)) ? "" : $sVersion;
+                }
             }
+
+            global $IGNORE_FILE;
+            /* Parse $this->aResults and compose $this->sReturn, filtering unwanted errors. */
+            $this->sResult = '<?xml version="1.0" encoding="UTF-8"?>'."\n".'<checkstyle>'."\n";
+            if (is_file($IGNORE_FILE))
+            {
+                $bNoIgnore = false;
+                $oXMLIgnored = simplexml_load_file($IGNORE_FILE);
+                $oJsonIgnored = json_encode($oXMLIgnored);
+                $aIgnored = json_decode($oJsonIgnored, true);
+            }
+            else
+            {
+                $bNoIgnore = true;
+            }
+            foreach ($this->aResults as $sError => $sVersion)
+            {
+                /** @var array $aIgnored */
+                if ($sVersion != "" or $bNoIgnore or !$this->isInErrors($aIgnored, $sError))
+                {
+                    $oError = simplexml_load_string($sError);
+                    $oError->error->attributes()["message"] = $sVersion . $oError->error->attributes()["message"];
+                    $this->sResult .= $oError->asXML()."\n";
+                }
+            }
+            $this->sResult .= '</checkstyle>'."\n";
         }
-        $this->sResult .= '</checkstyle>'."\n";
     }
 
     /** Run a multi-version psalm analysis and return the (xml formatted) exhaustive summary.
@@ -261,6 +326,7 @@ final class VersionedAnalyser
         {
             $oPsalmInstance = new PsalmInstance($sVersion, ".");
             echo $oPsalmInstance->calLPsalm("--set-baseline=psalm-baseline.xml")->stdout();
+            $debug = getcwd();
             rename("psalm-baseline.xml", "$BASELINE_FOLDER/$sVersion.xml");
         }
     }
