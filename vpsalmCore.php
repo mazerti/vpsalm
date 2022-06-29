@@ -214,7 +214,12 @@ final class VersionedAnalyser
     {
         global $argv;
         $sTargetFile = $argv[count($argv) - 1];
-        foreach ($this->aVersions as $sVersion)
+
+        if ($sTargetFile == "--version")
+        {
+            $sTargetFolder = ".";
+        }
+        else
         {
             $cwd = preg_replace("#\\\\#", "/", getcwd());
             $sPattern = "#(\S+?Psalmtemp_folder(\d+)|$cwd|\.)/(\S*)#";
@@ -225,10 +230,10 @@ final class VersionedAnalyser
                 or a copy with tree from project root with Psalmtemp_folderXXXX as root.");
             }
             $sTargetFolder = $aMatches[1];
+        }
 
-//            $sPattern = "#(Psalmtemp_folder(\d+)|C:)/(\S*)#";
-//            $sTargetFolder = preg_replace($sPattern, "Psalmtemp_folder$1/", $sTargetFile);
-            
+        foreach ($this->aVersions as $sVersion)
+        {
             $oInstance = new PsalmInstance($sVersion, $sTargetFolder);
             $iDashC = array_search("-c", $argv);
             if ($iDashC)
@@ -249,7 +254,7 @@ final class VersionedAnalyser
     {
         $sPattern = "#(.|\n)*<file name=\"\S+\">\n\s*<error line=\"\d+\" column=\"\d+\" severity=\"\w+\" message=\"(\w+):.*\"/>\n\s*</file>(.|\n)*#";
         $sErrorType = preg_replace($sPattern, "$2", $sError);
-        return array_search($sErrorType, $aIgnored) == false;
+        return array_search($sErrorType, $aIgnored) !== false;
     }
 
 
@@ -264,14 +269,12 @@ final class VersionedAnalyser
     private function sortErrors()
     {
         global $argv;
+        global $IGNORE_FILE;
+
         if ($argv[1] == "--version")
         {
             foreach ($this->aAnalysis as $sVersion=>$psalm)
             {
-                if ($psalm->code() != 0)
-                {
-                    throw new Exception("Call to version $sVersion went wrong, error code : {$psalm->code()}");
-                }
                 if ($this->aResults == null)
                 {
                     $this->aResults[0] = $psalm->stdout();
@@ -300,7 +303,6 @@ final class VersionedAnalyser
                 }
             }
 
-            global $IGNORE_FILE;
             /* Parse $this->aResults and compose $this->sReturn, filtering unwanted errors. */
             $this->sResult = '<?xml version="1.0" encoding="UTF-8"?>'."\n".'<checkstyle>'."\n";
             if (is_file($IGNORE_FILE))
@@ -317,9 +319,8 @@ final class VersionedAnalyser
             foreach ($this->aResults as $sError => $sVersion)
             {
                 /** @var array $aIgnored */
-                if ($sVersion != "" or $bNoIgnore or !$this->isInErrors($aIgnored, $sError))
+                if ($sVersion != "" or $bNoIgnore or !$this->isInErrors($aIgnored["type"], $sError))
                 {
-                    $debug = preg_match("#(<file name=\"\S+\">\n\s*<error line=\"\d+\" column=\"\d+\" severity=\"\w+\" message=\")(.+\"/>\n</file>)#", $sError);
                     $sErrorLog = preg_replace("#(<file name=\"\S+\">\n\s*<error line=\"\d+\" column=\"\d+\" severity=\"\w+\" message)=\"(.+\"/>\n</file>)#", "$1=\"$sVersion:$2", $sError);
                     $this->sResult .= $sErrorLog."\n";
                 }
