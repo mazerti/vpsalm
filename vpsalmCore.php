@@ -319,8 +319,9 @@ final class VersionedAnalyser
                 /** @var array $aIgnored */
                 if ($sVersion != "" or $bNoIgnore or !$this->isInErrors($aIgnored, $sError))
                 {
-                    $this->sResult .= preg_replace("#(\<file name=\"\S+\"\>\n\<error line=\"\d+\" column=\"\d\" severity=\"\w+\" messge=\")(\S+\"/\>\n\</file\>)#",
-                            "$1$sVersion$2", $sError)."\n";
+                    $debug = preg_match("#(<file name=\"\S+\">\n\s*<error line=\"\d+\" column=\"\d+\" severity=\"\w+\" message=\")(.+\"/>\n</file>)#", $sError);
+                    $sErrorLog = preg_replace("#(<file name=\"\S+\">\n\s*<error line=\"\d+\" column=\"\d+\" severity=\"\w+\" message)=\"(.+\"/>\n</file>)#", "$1=\"$sVersion:$2", $sError);
+                    $this->sResult .= $sErrorLog."\n";
                 }
             }
             $this->sResult .= '</checkstyle>'."\n";
