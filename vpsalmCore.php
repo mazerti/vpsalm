@@ -30,66 +30,6 @@ class Execution {
 }
 
 /**
- * Generate the $SPY_REPORT file to debug the phpstorm integration.
- */
-class Spy
-{
-    /** @var string $sErrors_File A file that can be used to store Errors. */
-    public $sErrors_File;
-    /** @var float $fTimeZero Time of the instantiation. */
-    private $fTimeZero;
-    /** @var array $aReport The reports from the last refresh. */
-    private $aReport;
-    /** @var string $id Identify the current report in $this->aReport. */
-    private $id;
-
-    /**
-     * @param array $arg        $argv typically.
-     * @param bool $bRefresh    $should the output be refreshed ?
-     */
-    function __construct(array $arg, bool $bRefresh = false)
-    {
-        global $SPY_REPORT;
-        $this->sErrors_File = sys_get_temp_dir()."/SpyErrors";
-        $this->fTimeZero = microtime(true);
-        $this->aReport = ($bRefresh) ? array() : json_decode(file_get_contents($SPY_REPORT), true);
-        $this->id = date("G:i") ."$:".implode(" ", $arg);
-        while (key_exists($this->id, $this->aReport))
-        {
-            $this->id .= "`";
-        }
-        $this->aReport[$this->id] = array(
-            "Sub Calls"=>array(),
-            "Return"=>"",
-            "Debug"=>"",
-        );
-    }
-    
-    public function watchCall(string $call, bool $watch_errors)
-    {
-        $this->aReport[$this->id]["Sub Calls"][] = array(
-            "Command" => $call,
-            "Duration" => microtime() - $this->fTimeZero
-        );
-        if ($watch_errors)
-        {
-            array_key_last($this->aReport[$this->id]["Sub Calls"])["Errors"] = file_get_contents($this->sErrors_File);
-        }
-    }
-
-    public function watchDebug(string $content)
-    {
-        $this->aReport[$this->id]["Debug"] .= "$content\n";
-    }
-
-    public function __destruct()
-    {
-        global $SPY_REPORT;
-        file_put_contents($SPY_REPORT, json_encode($this->aReport));
-    }
-}
-
-/**
  * Versioned access to Psalm adapting baseline to temp file if needed.
  */
 class PsalmInstance
