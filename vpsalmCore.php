@@ -1,6 +1,11 @@
 <?php
 
-include "config.php";
+$PSALM_PATH = dirname($argv[0])."/vendor/bin/psalm";
+$PSALM_PATH = preg_replace("#\\\\#", "/", $PSALM_PATH);
+
+$sCwd = preg_replace("#\\\\#", "/", getcwd());
+
+include $sCwd . "/vpsalm-config.php";
 
 /**
  * When instantiated execute the given command then stores its outputs
@@ -13,7 +18,6 @@ class Execution {
     /** @var string|null */
     private $sReturn;
     function __construct(string $cmd){
-        $debug = getcwd();
         exec($cmd, $this->aReturns, $this->iCode);
         /** @var array<array-key, string> aReturns */
         $this->aReturns = $this->aReturns ?: array();
@@ -49,7 +53,7 @@ class PsalmInstance
     }
 
     /** Create a temp Config file based on the global reference one. Save it in the $sConfigFile.
-     * @var bool $noBaseline    Indicates if a baseline should be added to the config.
+     * @param bool $noBaseline    Indicates if a baseline should be added to the config.
      * @return void
      */
     private function createConfig(bool $noBaseline=false): void
@@ -76,7 +80,7 @@ class PsalmInstance
         {
             unset($oConfig->projectFiles);
         }
-        file_put_contents($this->sConfigFile, $oConfig->asXML());
+        file_put_contents($this->sConfigFile, $oConfig->asXML()?:"");
     }
 
     /** Create a temp baseline file based on the global reference one matching with the version. Save it in the $sBaselineFile
@@ -97,6 +101,7 @@ class PsalmInstance
     public function calLPsalm(string $sParams): Execution
     {
         global $PSALM_PATH;
+        global $argv;
         if (preg_match("#.*--version.*#", $sParams))
         {
             $sConf = "";
@@ -112,7 +117,8 @@ class PsalmInstance
             $this->createBaseline();
             $sConf = "-c $this->sConfigFile ";
         }
-        $sCommand = "$PSALM_PATH $sConf$sParams 2> SpyErrors";
+        $sRoot = dirname($argv[0]);
+        $sCommand = "$PSALM_PATH --root=$sRoot $sConf$sParams 2> SpyErrors";
         return new Execution($sCommand);
     }
 }
@@ -122,18 +128,27 @@ class PsalmInstance
  */
 final class VersionedAnalyser
 {
-    /** @var array $aVersions Stores the versions that should be checked */
+    /** @var array|null $aVersions Stores the versions that should be checked */
     private $aVersions;
-    /** @var array<string, Execution> $aAnalysis Contains the results of the analysis. The keys are the versions analysed.*/
+    /** @var array<string, Execution>|null $aAnalysis Contains the results of the analysis. The keys are the versions analysed.*/
     private $aAnalysis;
     /** @var string $sReturnFormat Describe the format in which we want the results to be returned. */
     private $sReturnFormat;
-    /** @var array<string, string> $aResults Contains the errors logs to return.
+    /** @var array<string|int, string>|null $aResults Contains the errors logs to return.
      * The keys are the xml strings referencing an error,
      * the values are either a version or an empty string if the error exist in multiple evaluated versions */
     private $aResults;
-    /** @var string $sResult The result of the analysis. */
+    /** @var string|null $sResult The result of the analysis. */
     private $sResult;
+
+    function __construct(string $sReturnFormat="xml")
+    {
+        $this->aVersions = null;
+        $this->aAnalysis = null;
+        $this->sReturnFormat = $sReturnFormat;
+        $this->aResults = null;
+        $this->sResult = null;
+    }
 
     /** Checkout the versions to analyse and store them in $this->aVersions.
      * @return void
@@ -143,8 +158,9 @@ final class VersionedAnalyser
         global $COMPOSER;
         $oComposer = fopen($COMPOSER, "r");
         $sPHPversions = json_decode(fread($oComposer, filesize($COMPOSER)), true)["require"]["php"];
-        preg_match("#>=(\d.\d.\d) <(\d.\d.\d)#", $sPHPversions, $this->aVersions);
-        array_splice($this->aVersions, 0, 1);
+        $aMatches = null;
+        preg_match_all("#(\d\.\d\.\d)#", $sPHPversions, $aMatches);
+        $this->aVersions = $aMatches[0];
     }
 
     /** Run Psalm for each version and store the results in $this->aAnalysis.
@@ -153,6 +169,7 @@ final class VersionedAnalyser
     private function runPsalm()
     {
         global $argv;
+        global $sCwd;
         $sTargetFile = $argv[count($argv) - 1];
 
         if ($sTargetFile == "--version")
@@ -161,8 +178,7 @@ final class VersionedAnalyser
         }
         else
         {
-            $cwd = preg_replace("#\\\\#", "/", getcwd());
-            $sPattern = "#(\S+?Psalmtemp_folder(\d+)|$cwd|\.)/(\S*)#";
+            $sPattern = "#(\S+?Psalmtemp_folder(\d+)|$sCwd|\.)/(\S*)#";
             $aMatches = null;
             if (!preg_match($sPattern, $sTargetFile, $aMatches))
             {
@@ -172,6 +188,7 @@ final class VersionedAnalyser
             $sTargetFolder = $aMatches[1];
         }
 
+        assert(!is_null($this->aVersions), "No php version found");
         foreach ($this->aVersions as $sVersion)
         {
             $oInstance = new PsalmInstance($sVersion, $sTargetFolder);
@@ -211,6 +228,7 @@ final class VersionedAnalyser
         global $argv;
         global $IGNORE_FILE;
 
+        assert(!is_null($this->aAnalysis), "No analysis execution registered.");
         if ($argv[1] == "--version")
         {
             foreach ($this->aAnalysis as $sVersion=>$psalm)
@@ -224,6 +242,7 @@ final class VersionedAnalyser
                     throw new Exception("Psalm version don't match, very weird !");
                 }
             }
+            assert(!is_null($this->aResults), "No psalm version get.");
             $this->sResult = $this->aResults[0];
         }
         else
@@ -259,11 +278,16 @@ final class VersionedAnalyser
             foreach ($this->aResults as $sError => $sVersion)
             {
                 /** @var array $aIgnored */
+                assert(is_string($sError), "Invalid key type (should be string). Weird.");
                 if ($sVersion != "" or $bNoIgnore or !$this->isInErrors($aIgnored["type"], $sError))
                 {
                     $sErrorLog = preg_replace("#(<file name=\"\S+\">\n\s*<error line=\"\d+\" column=\"\d+\" severity=\"\w+\" message)=\"(.+\"/>\n</file>)#", "$1=\"$sVersion:$2", $sError);
                     $this->sResult .= $sErrorLog."\n";
                 }
+            }
+            if ($this->sResult == '<?xml version="1.0" encoding="UTF-8"?>'."\n".'<checkstyle>'."\n")
+            {
+                $this->sResult .= '<file name="tests/tests_compat.php">'."\n".' <error line="1" column="1" severity="error" message="Clean code"/>'."\n".'</file>'."\n";
             }
             $this->sResult .= '</checkstyle>'."\n";
         }
@@ -278,19 +302,20 @@ final class VersionedAnalyser
         $this->getVersions();
         $this->runPsalm();
         $this->sortErrors();
+        assert(!is_null($this->sResult), "There is nothing to return.");
         return $this->sResult;
     }
 
     /** Create baseline for all watched versions. */
-    public function setBaselines()
+    public function setBaselines():void
     {
         global $BASELINE_FOLDER;
         $this->getVersions();
+        assert(!is_null($this->aVersions), "No php version found to analyse");
         foreach ($this->aVersions as $sVersion)
         {
             $oPsalmInstance = new PsalmInstance($sVersion, ".");
             echo $oPsalmInstance->calLPsalm("--set-baseline=psalm-baseline.xml")->stdout();
-            $debug = getcwd();
             rename("psalm-baseline.xml", "$BASELINE_FOLDER/$sVersion.xml");
         }
     }
