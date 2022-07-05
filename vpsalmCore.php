@@ -4,7 +4,7 @@ $PSALM_PATH = dirname($argv[0])."/vendor/bin/psalm";
 $PSALM_PATH = preg_replace("#\\\\#", "/", $PSALM_PATH);
 
 $sCwd = preg_replace("#\\\\#", "/", getcwd());
-
+/** @psalm-suppress UnresolvableInclude */
 include $sCwd . "/vpsalm-config.php";
 
 /**
@@ -48,8 +48,8 @@ class PsalmInstance
     function __construct(string $sVersion, string $sTargetFolder)
     {
         $this->sVersion = $sVersion;
-        $this->sConfigFile = $sTargetFolder."/psalm.xml";
-        $this->sBaselineFile = $sTargetFolder."/psalm-baseline.xml";
+        $this->sConfigFile = $sTargetFolder."psalm.xml";
+        $this->sBaselineFile = $sTargetFolder."psalm-baseline.xml";
     }
 
     /** Create a temp Config file based on the global reference one. Save it in the $sConfigFile.
@@ -80,7 +80,8 @@ class PsalmInstance
         {
             unset($oConfig->projectFiles);
         }
-        file_put_contents($this->sConfigFile, $oConfig->asXML()?:"");
+        assert(!$oConfig);
+        file_put_contents($this->sConfigFile, $oConfig->asXML());
     }
 
     /** Create a temp baseline file based on the global reference one matching with the version. Save it in the $sBaselineFile
@@ -109,7 +110,7 @@ class PsalmInstance
         else if (preg_match("#.*--set-baseline.*#", $sParams))
         {
             $this->createConfig(true);
-            $sConf = "-c $this->sConfigFile ";
+            $sConf = "-c $this->sConfigFile --find-unused-code ";
         }
         else
         {
@@ -178,7 +179,7 @@ final class VersionedAnalyser
         }
         else
         {
-            $sPattern = "#(\S+?Psalmtemp_folder(\d+)|$sCwd|\.)/(\S*)#";
+            $sPattern = "#(\S+?Psalmtemp_folder(\d+)/|$sCwd/|\./|)(\S*)#";
             $aMatches = null;
             if (!preg_match($sPattern, $sTargetFile, $aMatches))
             {
@@ -198,6 +199,10 @@ final class VersionedAnalyser
                 array_splice($argv, $iDashC, 2);
             }
             $sParams = implode(" ", array_slice($argv, 1));
+            if (!preg_grep("#--output-format=\w+#", $argv))
+            {
+                $sParams .= " --output-format=checkstyle";
+            }
             $this->aAnalysis[$sVersion] = $oInstance->calLPsalm($sParams);
         }
     }
@@ -233,6 +238,7 @@ final class VersionedAnalyser
         {
             foreach ($this->aAnalysis as $sVersion=>$psalm)
             {
+                assert($psalm->code()==0 or $psalm->code()==2, "Psalm encountered an internal issue dealing with version $sVersion.");
                 if ($this->aResults == null)
                 {
                     $this->aResults[0] = $psalm->stdout();
@@ -250,10 +256,7 @@ final class VersionedAnalyser
             /* First merge the different results, removing the duplicates. */
             foreach ($this->aAnalysis as $sVersion => $oExec)
             {
-                if ($oExec->code() != 0)
-                {
-                    //throw new Exception("Call to version $sVersion went wrong, error code : {$oExec->code()}");
-                }
+                assert($oExec->code()==0 or $oExec->code()==2, "Psalm encountered an internal issue dealing with version $sVersion. Error code : {$oExec->code()}");
                 /** @var SimpleXMLElement $oWarnings */
                 $oWarnings = simplexml_load_string($oExec->stdout());
                 foreach ($oWarnings as $oErrorFile)
@@ -275,6 +278,7 @@ final class VersionedAnalyser
             {
                 $bNoIgnore = true;
             }
+            $this->aResults = $this->aResults?:array();
             foreach ($this->aResults as $sError => $sVersion)
             {
                 /** @var array $aIgnored */
@@ -287,7 +291,7 @@ final class VersionedAnalyser
             }
             if ($this->sResult == '<?xml version="1.0" encoding="UTF-8"?>'."\n".'<checkstyle>'."\n")
             {
-                $this->sResult .= '<file name="tests/tests_compat.php">'."\n".' <error line="1" column="1" severity="error" message="Clean code"/>'."\n".'</file>'."\n";
+                $this->sResult .= '<file name="any/file">'."\n".' <error line="1" column="1" severity="error" message="Clean code, congratulations !"/>'."\n".'</file>'."\n";
             }
             $this->sResult .= '</checkstyle>'."\n";
         }
@@ -314,7 +318,7 @@ final class VersionedAnalyser
         assert(!is_null($this->aVersions), "No php version found to analyse");
         foreach ($this->aVersions as $sVersion)
         {
-            $oPsalmInstance = new PsalmInstance($sVersion, ".");
+            $oPsalmInstance = new PsalmInstance($sVersion, "");
             echo $oPsalmInstance->calLPsalm("--set-baseline=psalm-baseline.xml")->stdout();
             rename("psalm-baseline.xml", "$BASELINE_FOLDER/$sVersion.xml");
         }
