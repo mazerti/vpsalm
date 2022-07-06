@@ -39,33 +39,63 @@ class Execution {
 class PsalmInstance
 {
     /** @var string $sVersion The version this instance is going to analyse. */
-    public $sVersion;
+    private $sVersion;
+    /** @var string|null $sTargetFile The file to analyze (if null, the config file should contain the project files to analyze) */
+    private $sTargetFile;
     /** @var string $sConfigFile The folder with the config for this instance.*/
-    public $sConfigFile;
+    private $sConfigFile;
     /** @var string $sBaselineFile The folder with the baseline for this instance. */
-    public $sBaselineFile;
+    private $sBaselineFile;
+    /** @var string $sSourceBaseline The baseline to refer on. */
+    private $sSourceBaseline;
+    /** @var string|null $sFilePath The relative path to the target file (if any) from the target folder (i.e. project root in the current situation). */
+    private $sFilePath;
 
-    function __construct(string $sVersion, string $sTargetFolder)
+    function __construct(string $sVersion, string $sTargetFile)
     {
+        global $BASELINE_FOLDER;
+        global $sCwd;
         $this->sVersion = $sVersion;
-        $this->sConfigFile = $sTargetFolder."psalm.xml";
+        $this->sTargetFile = (file_exists($sTargetFile) and preg_match("#.+\.php#", $sTargetFile)) ? $sTargetFile : "";
+
+        if ($sTargetFile == "--version")
+        {
+            $sTargetFolder = ".";
+        }
+        else
+        {
+            $sPattern = "#(?P<root>\S+?Psalmtemp_folder(\d+)/|$sCwd/|\./|)(?P<file>\S*)#";
+            $aMatches = null;
+            if (!preg_match($sPattern, $this->sTargetFile, $aMatches))
+            {
+                throw new Exception("Invalid path, must point toward either a project file
+                or a copy with tree from project root with Psalmtemp_folderXXXX as root.");
+            }
+            $sTargetFolder = $aMatches["root"];
+            $this->sFilePath = $aMatches["file"];
+        }
+        $this->sConfigFile = $sTargetFolder."tmp-psalm.xml";
         $this->sBaselineFile = $sTargetFolder."psalm-baseline.xml";
+
+        $this->sSourceBaseline = "$BASELINE_FOLDER/$sVersion/$this->sFilePath-baseline.xml";
     }
 
-    /** Create a temp Config file based on the global reference one. Save it in the $sConfigFile.
-     * @param bool $noBaseline    Indicates if a baseline should be added to the config.
+    /** Create a temporary config file ($this->sConfigFile) in the same folder than the analyzed file, altering the given parameters (baseline, projectFiles, phpVersion).
+     * @param bool $useBaseline         Indicates if the baseline in the reference config should be copied too.
+     * @param bool $useProjectFiles     Indicates if the project files in the reference config file should be copied too.
      * @return void
      */
-    private function createConfig(bool $noBaseline=false): void
+    private function createConfig(bool $useBaseline): void
     {
         global $CONFIG_FILE;
         $oConfig = simplexml_load_file($CONFIG_FILE);
+        assert($oConfig !== false, "Issue encountered while scanning config xml");
+
+        /* Change phpVersion */
         $oConfig->attributes()["phpVersion"] = $this->sVersion;
-        if ($noBaseline)
-        {
-            unset($oConfig->attributes()["errorBaseline"]);
-        }
-        else
+
+        /* Change errorBaseline */
+        if ($useBaseline)
         {
             if (isset($oConfig->attributes()["errorBaseline"]))
             {
@@ -76,11 +106,17 @@ class PsalmInstance
                 $oConfig->addAttribute("errorBaseline", $this->sBaselineFile);
             }
         }
-        if (realpath($this->sConfigFile) != realpath($CONFIG_FILE))
+        else
+        {
+            unset($oConfig->attributes()["errorBaseline"]);
+        }
+
+        /* Change projectFiles */
+        if (!is_null($this->sTargetFile) and file_exists($this->sTargetFile))
         {
             unset($oConfig->projectFiles);
         }
-        assert(!$oConfig);
+
         file_put_contents($this->sConfigFile, $oConfig->asXML());
     }
 
@@ -88,11 +124,31 @@ class PsalmInstance
      *
      * @return void
      */
-    private function createBaseline(): void
+    private function relocateBaseline(): void
     {
-        global $BASELINE_FOLDER;
-        copy("$BASELINE_FOLDER/$this->sVersion.xml", $this->sBaselineFile);
+        copy("$this->sSourceBaseline", $this->sBaselineFile);
     }
+
+    /** Create a baseline using `psalm --set-baseline=...` and store it at $this->sSourceBaseline (i.e. in <BaselineFolder>/<version>/path/to/file)
+     * @param string $sParams The CLI options given to the command.
+     * @return void
+     */
+    private function createBaseline(string $sParams):void
+    {
+        /** TO DO */
+        global $argv;
+        global $BASELINE_FOLDER;
+        global $PSALM_PATH;
+        $this->createConfig(false);
+        $sRoot = dirname($argv[0]);
+        exec("$PSALM_PATH --root=$sRoot -c $this->sConfigFile --set-baseline=psalm-baseline.xml $sParams 2> SpyErrors");
+        if (!is_dir(dirname("$BASELINE_FOLDER/$this->sVersion/$this->sFilePath-baseline.xml")))
+        {
+            mkdir(dirname("$BASELINE_FOLDER/$this->sVersion/$this->sFilePath-baseline.xml"), 0777, true);
+        }
+        rename("psalm-baseline.xml", "$this->sSourceBaseline");
+    }
+
 
     /** Call Psalm with the specific version parameters.
      *
@@ -107,20 +163,32 @@ class PsalmInstance
         {
             $sConf = "";
         }
-        else if (preg_match("#.*--set-baseline.*#", $sParams))
+        /*else if (preg_match("#.*--set-baseline.*#", $sParams))
         {
             $this->createConfig(true);
             $sConf = "-c $this->sConfigFile --find-unused-code ";
-        }
+        }*/
         else
         {
-            $this->createConfig();
-            $this->createBaseline();
+            if (!file_exists($this->sSourceBaseline))
+            {
+                $this->createBaseline($sParams);
+            }
+            $this->createConfig(true);
+            $this->relocateBaseline(); /*relocateBaseline : crée une copie de $this->sSourceBaseline à côté du fichier de config.*/
             $sConf = "-c $this->sConfigFile ";
         }
         $sRoot = dirname($argv[0]);
         $sCommand = "$PSALM_PATH --root=$sRoot $sConf$sParams 2> SpyErrors";
         return new Execution($sCommand);
+    }
+
+    function __destruct()
+    {
+        if (file_exists($this->sConfigFile))
+        {
+            unlink($this->sConfigFile);
+        }
     }
 }
 
@@ -170,29 +238,12 @@ final class VersionedAnalyser
     private function runPsalm()
     {
         global $argv;
-        global $sCwd;
         $sTargetFile = $argv[count($argv) - 1];
-
-        if ($sTargetFile == "--version")
-        {
-            $sTargetFolder = ".";
-        }
-        else
-        {
-            $sPattern = "#(\S+?Psalmtemp_folder(\d+)/|$sCwd/|\./|)(\S*)#";
-            $aMatches = null;
-            if (!preg_match($sPattern, $sTargetFile, $aMatches))
-            {
-                throw new Exception("Invalid path, must point toward either a project file
-                or a copy with tree from project root with Psalmtemp_folderXXXX as root.");
-            }
-            $sTargetFolder = $aMatches[1];
-        }
 
         assert(!is_null($this->aVersions), "No php version found");
         foreach ($this->aVersions as $sVersion)
         {
-            $oInstance = new PsalmInstance($sVersion, $sTargetFolder);
+            $oInstance = new PsalmInstance($sVersion, $sTargetFile);
             $iDashC = array_search("-c", $argv);
             if ($iDashC)
             {
