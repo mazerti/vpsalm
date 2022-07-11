@@ -77,7 +77,7 @@ class PsalmInstance
         $this->sConfigFile = $sTargetFolder."tmp-psalm.xml";
         $this->sBaselineFile = $sTargetFolder."psalm-baseline.xml";
 
-        $this->sSourceBaseline = "$BASELINE_FOLDER/$sVersion/$this->sFilePath-baseline.xml";
+        $this->sSourceBaseline = "$BASELINE_FOLDER/$this->sFilePath-baseline.xml";
     }
 
     /** Create a temporary config file ($this->sConfigFile) in the same folder than the analyzed file, altering the given parameters (baseline, projectFiles, phpVersion).
@@ -142,11 +142,11 @@ class PsalmInstance
         $this->createConfig(false);
         $sRoot = dirname($argv[0]);
         exec("$PSALM_PATH --root=$sRoot -c $this->sConfigFile --set-baseline=psalm-baseline.xml $sParams 2> SpyErrors");
-        if (!is_dir(dirname("$BASELINE_FOLDER/$this->sVersion/$this->sFilePath-baseline.xml")))
+        if (!is_dir(dirname("$this->sSourceBaseline")))
         {
-            mkdir(dirname("$BASELINE_FOLDER/$this->sVersion/$this->sFilePath-baseline.xml"), 0777, true);
+            mkdir(dirname("$this->sSourceBaseline"), 0777, true);
         }
-        rename("psalm-baseline.xml", "$this->sSourceBaseline");
+        rename("$this->sBaselineFile", "$this->sSourceBaseline");
     }
 
 
