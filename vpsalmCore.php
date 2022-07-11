@@ -308,8 +308,9 @@ final class VersionedAnalyser
             foreach ($this->aAnalysis as $sVersion => $oExec)
             {
                 assert($oExec->code()==0 or $oExec->code()==2, "Psalm encountered an internal issue dealing with version $sVersion. Error code : {$oExec->code()}");
+                $sTmp = preg_replace("#(.|\n)*?(\<\?xml(.|\n)+</checkstyle>)#", "$2", $oExec->stdout());
                 /** @var SimpleXMLElement $oWarnings */
-                $oWarnings = simplexml_load_string($oExec->stdout());
+                $oWarnings = simplexml_load_string($sTmp);
                 foreach ($oWarnings as $oErrorFile)
                 {
                     $this->aResults[$oErrorFile->asXML()] = (isset($this->aResults[$oErrorFile->asXML()])) ? "" : $sVersion;
