@@ -80,6 +80,45 @@ class PsalmInstance
         $this->sSourceBaseline = "$BASELINE_FOLDER/$this->sFilePath-baseline.xml";
     }
 
+    /** Function giving the relative path
+     * copied from https://stackoverflow.com/questions/2637945/getting-relative-path-from-absolute-path-in-php
+     * @param $from
+     * @param $to
+     * @return string
+     */
+    private function getRelativePath($from, $to)
+    {
+        // some compatibility fixes for Windows paths
+        $from = is_dir($from) ? rtrim($from, '\/') . '/' : $from;
+        $to   = is_dir($to)   ? rtrim($to, '\/') . '/'   : $to;
+        $from = str_replace('\\', '/', $from);
+        $to   = str_replace('\\', '/', $to);
+
+        $from     = explode('/', $from);
+        $to       = explode('/', $to);
+        $relPath  = $to;
+
+        foreach($from as $depth => $dir) {
+            // find first non-matching dir
+            if($dir === $to[$depth]) {
+                // ignore this directory
+                array_shift($relPath);
+            } else {
+                // get number of remaining dirs to $from
+                $remaining = count($from) - $depth;
+                if($remaining > 1) {
+                    // add traversals up to first matching dir
+                    $padLength = (count($relPath) + $remaining - 1) * -1;
+                    $relPath = array_pad($relPath, $padLength, '..');
+                    break;
+                } else {
+                    $relPath[0] = $relPath[0];
+                }
+            }
+        }
+        return implode('/', $relPath);
+    }
+
     /** Create a temporary config file ($this->sConfigFile) in the same folder than the analyzed file, altering the given parameters (baseline, projectFiles, phpVersion).
      * @param bool $useBaseline         Indicates if the baseline in the reference config should be copied too.
      * @param bool $useProjectFiles     Indicates if the project files in the reference config file should be copied too.
@@ -109,6 +148,15 @@ class PsalmInstance
         else
         {
             unset($oConfig->attributes()["errorBaseline"]);
+        }
+
+        /* Relocate autoloader file if needed */
+        if (isset($oConfig->attributes()["autoloader"]))
+        {
+            /* On s'interesse d'abord au cas ou il y a un unique fichier d'autoload */
+            $sAbsAutoloader = dirname($CONFIG_FILE)."/".$oConfig->attributes()["autoloader"];
+            $sRelAutoloader = $this->getRelativePath($this->sConfigFile, $sAbsAutoloader);
+            $oConfig->attributes()["autoloader"] = $sRelAutoloader;
         }
 
         /* Change projectFiles */
@@ -187,7 +235,7 @@ class PsalmInstance
     {
         if (file_exists($this->sConfigFile))
         {
-            unlink($this->sConfigFile);
+            //unlink($this->sConfigFile);
         }
     }
 }

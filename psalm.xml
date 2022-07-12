@@ -1,5 +1,13 @@
 <?xml version="1.0"?>
-<psalm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="https://getpsalm.org/schema/config" errorLevel="2" resolveFromConfigFile="true" xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd" phpVersion="7.2.5" errorBaseline="C:/wamp64/www/static_analysis/VPsalm/psalm-baseline.xml">
+<psalm xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns="https://getpsalm.org/schema/config"
+       errorLevel="2"
+       resolveFromConfigFile="true"
+       autoloader="tests/autoloader.php"
+       xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+       phpVersion="7.2.5"
+       errorBaseline="C:/wamp64/www/static_analysis/VPsalm/psalm-baseline.xml"
+>
     <projectFiles>
         <directory name="."/>
         <file name="vendor/autoload.php"/>
@@ -16,4 +24,5 @@
             <directory name="vendor"/>
         </ignoreFiles>
     </projectFiles>
+
 </psalm>
