@@ -51,3 +51,4 @@ When PHPStorm calls Vpsalm, it first create a temp folder called Psalmtemp_folde
 
  - Adapt other psalm feature (Autoloader for examle)
  - Linux/IOS compatibility
+ - Use parallel psalm call to improve performances
