@@ -150,15 +150,6 @@ class PsalmInstance
             unset($oConfig->attributes()["errorBaseline"]);
         }
 
-        /* Relocate autoloader file if needed */
-        if (isset($oConfig->attributes()["autoloader"]))
-        {
-            /* On s'interesse d'abord au cas ou il y a un unique fichier d'autoload */
-            $sAbsAutoloader = dirname($CONFIG_FILE)."/".$oConfig->attributes()["autoloader"];
-            $sRelAutoloader = $this->getRelativePath($this->sConfigFile, $sAbsAutoloader);
-            $oConfig->attributes()["autoloader"] = $sRelAutoloader;
-        }
-
         /* Change projectFiles */
         if (!is_null($this->sTargetFile) and file_exists($this->sTargetFile))
         {
@@ -235,7 +226,7 @@ class PsalmInstance
     {
         if (file_exists($this->sConfigFile))
         {
-            //unlink($this->sConfigFile);
+            unlink($this->sConfigFile);
         }
     }
 }
