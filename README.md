@@ -24,5 +24,25 @@ You may use vpsalm in one of the following way :
   - Call it from the root of your project
   - If you want to analyze a single file put it at the end of your CLI call
   - If you want to analyze several files register them in your psalm.xml config file (it may have a different name) and make sure the last CLI argument is not a php file.
+
+![VPsalm Usage](images/vpsalm_usage.svg
+)
   
-  
+## Behavior
+
+When you call vpsalm it will follow the following pattern : 
+
+1. Check your project's php version from composer.json
+2. Check if a baseline already exists for the called file/folder. If not, create one using the first parsed phpversion.
+3. Call Psalm for each php version.
+4. Sort the warnings raised by psalm and add a tag in front to identify on which php version the error occurs : 
+    |Tag            |Meaning                                                                  |
+    |:-:            |:-:                                                                      |
+    |\<phpVersion\>:|The warning was found only in psalm analysis for the precised php version|
+    |:              |The warning was raised on several psalm analysis                         |
+  If an error is found by several psalm calls and a vpsalm-ignore file exists then the error will be ignored if it's type appear in vpsalm-ignore (deprecated feature).
+  At the end of the sort if no warning has been reported the warning "Clean code, Congratulations !" will be returned. This is useful for testing but in practice it may be better to remove this behavior so that a clean code would not raise warnings at all.
+
+When PHPStorm calls Vpsalm, it first create a temp folder called Psalmtemp_folderxxxx/ in which it copies the analysed file. It then call vpsalm (psalm supposedly) with the temp file as CLI argument. Vpsalm will copy and adapt the config file and the baseline to this new environment so that it simulates your project.
+![phpstorm behavior](images/phpstorm_behavior.svg
+)
