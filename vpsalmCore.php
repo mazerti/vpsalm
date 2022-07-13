@@ -1,5 +1,10 @@
 <?php
 
+/*
+ * @copyright   Copyright (C) 2010-2022 Combodo SARL
+ * @license     http://opensource.org/licenses/AGPL-3.0
+ */
+
 $PSALM_PATH = dirname($argv[0])."/vendor/bin/psalm";
 $PSALM_PATH = preg_replace("#\\\\#", "/", $PSALM_PATH);
 
@@ -78,45 +83,6 @@ class PsalmInstance
         $this->sBaselineFile = $sTargetFolder."psalm-baseline.xml";
 
         $this->sSourceBaseline = "$BASELINE_FOLDER/$this->sFilePath-baseline.xml";
-    }
-
-    /** Function giving the relative path
-     * copied from https://stackoverflow.com/questions/2637945/getting-relative-path-from-absolute-path-in-php
-     * @param $from
-     * @param $to
-     * @return string
-     */
-    private function getRelativePath($from, $to)
-    {
-        // some compatibility fixes for Windows paths
-        $from = is_dir($from) ? rtrim($from, '\/') . '/' : $from;
-        $to   = is_dir($to)   ? rtrim($to, '\/') . '/'   : $to;
-        $from = str_replace('\\', '/', $from);
-        $to   = str_replace('\\', '/', $to);
-
-        $from     = explode('/', $from);
-        $to       = explode('/', $to);
-        $relPath  = $to;
-
-        foreach($from as $depth => $dir) {
-            // find first non-matching dir
-            if($dir === $to[$depth]) {
-                // ignore this directory
-                array_shift($relPath);
-            } else {
-                // get number of remaining dirs to $from
-                $remaining = count($from) - $depth;
-                if($remaining > 1) {
-                    // add traversals up to first matching dir
-                    $padLength = (count($relPath) + $remaining - 1) * -1;
-                    $relPath = array_pad($relPath, $padLength, '..');
-                    break;
-                } else {
-                    $relPath[0] = $relPath[0];
-                }
-            }
-        }
-        return implode('/', $relPath);
     }
 
     /** Create a temporary config file ($this->sConfigFile) in the same folder than the analyzed file, altering the given parameters (baseline, projectFiles, phpVersion).
