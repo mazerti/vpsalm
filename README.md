@@ -1,6 +1,6 @@
 # VPsalm
 
-A sub-script for psalm managing the following features :
+A script for psalm managing the following features :
 
  - Psalm baseline in PHPStorm : PHPStorm's Psalm plugin uses temporary files which makes the baseline feature inemployable. This script does the necessary manipulations to correct this.
  - Managing phpVersion : According to the composer.json, VPsalm will call psalm on limit cases and reserve a special treatment for the warnings raised on a single version.
