@@ -46,3 +46,8 @@ When you call vpsalm it will follow the following pattern :
 When PHPStorm calls Vpsalm, it first create a temp folder called Psalmtemp_folderxxxx/ in which it copies the analysed file. It then call vpsalm (psalm supposedly) with the temp file as CLI argument. Vpsalm will copy and adapt the config file and the baseline to this new environment so that it simulates your project.
 ![phpstorm behavior](images/phpstorm_behavior.svg
 )
+
+## TO DO
+
+ - Adapt other psalm feature (Autoloader for examle)
+ - Linux/IOS compatibility
